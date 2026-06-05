@@ -8,9 +8,13 @@ const upload = require('../middleware/upload');
 const router = express.Router();
 
 // --- STORY / FEED ROUTINGS ---
-router.post('/', protect, upload.single('cover_image'), validatePostCreation, postController.createPost);
+router.post('/', protect, upload.fields([
+  { name: 'cover_image', maxCount: 1 },
+  { name: 'page_images', maxCount: 50 }
+]), validatePostCreation, postController.createPost);
 router.get('/', postController.getPostsFeed);
 router.get('/userposts/:userId?', protect, postController.getUserPosts);
+router.get('/hashtags/trending', postController.getTrendingHashtags);
 router.get('/:postId', postController.getPostById);
 router.delete('/:postId', protect, postController.deletePost);
 
@@ -22,6 +26,7 @@ router.get('/getdraftposts/:userId?', protect, draftController.getUserDrafts);
 router.post('/toggleSupport/:postId', protect, postController.toggleSupport);
 router.post('/toggleSave/:postId', protect, postController.toggleSave);
 router.get('/savedposts/:userId?', protect, postController.getSavedPosts);
+router.post('/view/:postId', postController.incrementViews);
 
 // --- DOCUMENT AI TEXT EXTRACTION & CHUNKING ---
 router.post('/extractDocument', protect, upload.single('document'), postController.extractDocument);

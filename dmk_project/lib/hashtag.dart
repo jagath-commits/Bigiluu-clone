@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
+import 'package:http/http.dart' as http;
 import 'package:dmk_project/app_theme.dart';
+import 'package:dmk_project/api_config.dart';
 import 'package:dmk_project/home.dart';
 import 'package:dmk_project/write.dart';
 import 'package:flutter/cupertino.dart';
@@ -33,9 +35,30 @@ class _HashtagPageState extends State<HashtagPage> {
   }
 
   Future<void> fetchHashtags() async {
+    if (!mounted) return;
+    setState(() {
+      isLoading = true;
+    });
+    try {
+      final response = await http.get(
+        Uri.parse("${ApiConfig.apiBaseUrl}/posts/hashtags/trending"),
+      );
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded['success'] == true && decoded['data'] is List) {
+          setState(() {
+            hashtags = List<Map<String, dynamic>>.from(
+              (decoded['data'] as List).map((e) => {
+                "hashtag": e["tag"],
+                "count": e["count"],
+              })
+            );
+          });
+        }
+      }
+    } catch (_) {}
     if (mounted) {
       setState(() {
-        hashtags = [];
         isLoading = false;
       });
     }
@@ -208,18 +231,48 @@ class _HashtagPostsPageState extends State<HashtagPostsPage> {
   }
 
   Future<void> fetchPosts() async {
+    if (!mounted) return;
+    setState(() {
+      isLoading = true;
+    });
+    try {
+      final tag = widget.tag.startsWith('#') ? widget.tag : '#${widget.tag}';
+      final encodedTag = Uri.encodeComponent(tag);
+      final response = await http.get(
+        Uri.parse("${ApiConfig.apiBaseUrl}/posts?search=$encodedTag"),
+      );
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded['success'] == true && decoded['data'] is List) {
+          setState(() {
+            posts = List<Map<String, dynamic>>.from(
+              (decoded['data'] as List).map(
+                (e) => Map<String, dynamic>.from(e as Map),
+              ),
+            );
+          });
+        }
+      }
+    } catch (_) {}
     if (mounted) {
       setState(() {
-        posts = [];
         isLoading = false;
       });
     }
   }
 
   Future<void> toggleLike(String postId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString("token") ?? "";
+    if (token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please sign in to support stories")),
+      );
+      return;
+    }
+
     final bool isAlreadyLiked = likedPosts.contains(postId);
 
-    // 🔥 Instant UI Update
     setState(() {
       if (isAlreadyLiked) {
         likedPosts.remove(postId);
@@ -227,7 +280,6 @@ class _HashtagPostsPageState extends State<HashtagPostsPage> {
         likedPosts.add(postId);
       }
 
-      // ✅ Update support count locally
       for (var p in posts) {
         if (p['post_id']?.toString() == postId) {
           int currentCount =
@@ -240,12 +292,68 @@ class _HashtagPostsPageState extends State<HashtagPostsPage> {
       }
     });
 
-    _saveInteractionsLocal();
+    await _saveInteractionsLocal();
+
+    try {
+      final response = await http.post(
+        Uri.parse("${ApiConfig.apiBaseUrl}/posts/toggleSupport/$postId"),
+        headers: {
+          "Authorization": "Bearer $token",
+        },
+      );
+      if (response.statusCode != 200) {
+        // Revert
+        setState(() {
+          if (isAlreadyLiked) {
+            likedPosts.add(postId);
+          } else {
+            likedPosts.remove(postId);
+          }
+          for (var p in posts) {
+            if (p['post_id']?.toString() == postId) {
+              int currentCount =
+                  int.tryParse(p['support_count']?.toString() ?? '0') ?? 0;
+              p['support_count'] = isAlreadyLiked
+                  ? (currentCount + 1)
+                  : (currentCount - 1).clamp(0, 999999);
+              break;
+            }
+          }
+        });
+        await _saveInteractionsLocal();
+      }
+    } catch (_) {
+      // Revert
+      setState(() {
+        if (isAlreadyLiked) {
+          likedPosts.add(postId);
+        } else {
+          likedPosts.remove(postId);
+        }
+        for (var p in posts) {
+          if (p['post_id']?.toString() == postId) {
+            int currentCount =
+                int.tryParse(p['support_count']?.toString() ?? '0') ?? 0;
+            p['support_count'] = isAlreadyLiked
+                ? (currentCount + 1)
+                : (currentCount - 1).clamp(0, 999999);
+            break;
+          }
+        }
+      });
+      await _saveInteractionsLocal();
+    }
   }
 
   void toggleSave(String postId) async {
-    String? userId = await getUserId();
-    if (userId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString("token") ?? "";
+    if (token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please sign in to bookmark stories")),
+      );
+      return;
+    }
 
     final bool isAlreadySaved = savedPosts.contains(postId);
 
@@ -256,7 +364,38 @@ class _HashtagPostsPageState extends State<HashtagPostsPage> {
         savedPosts.add(postId);
       }
     });
-    _saveInteractionsLocal();
+
+    await _saveInteractionsLocal();
+
+    try {
+      final response = await http.post(
+        Uri.parse("${ApiConfig.apiBaseUrl}/posts/toggleSave/$postId"),
+        headers: {
+          "Authorization": "Bearer $token",
+        },
+      );
+      if (response.statusCode != 200) {
+        // Revert
+        setState(() {
+          if (isAlreadySaved) {
+            savedPosts.add(postId);
+          } else {
+            savedPosts.remove(postId);
+          }
+        });
+        await _saveInteractionsLocal();
+      }
+    } catch (_) {
+      // Revert
+      setState(() {
+        if (isAlreadySaved) {
+          savedPosts.add(postId);
+        } else {
+          savedPosts.remove(postId);
+        }
+      });
+      await _saveInteractionsLocal();
+    }
   }
 
   @override
@@ -484,7 +623,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                                                   .isNotEmpty) {
                                             return ExpandablePostImage(
                                               imageUrl:
-                                                  "https://bigiluu.com/${block['image']}",
+                                                  "${ApiConfig.baseUrl}/${block['image']}",
                                             );
                                           }
                                           return const SizedBox();

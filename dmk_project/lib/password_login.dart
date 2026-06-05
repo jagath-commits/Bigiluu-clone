@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:dmk_project/api_config.dart';
 import 'package:dmk_project/app_theme.dart';
 import 'package:dmk_project/branding.dart';
 import 'package:dmk_project/home.dart';
@@ -64,21 +67,57 @@ class _PasswordLoginPageState extends State<PasswordLoginPage> {
 
     setState(() => isLoading = true);
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString("token", phone);
-    await prefs.setString("user_id", phone);
-    await prefs.setString("user_mobile", phone);
-
-    if (mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const MainShell()),
-        (route) => false,
+    try {
+      final response = await http.post(
+        Uri.parse("${ApiConfig.apiBaseUrl}/auth/login"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "mobileNumber": phone,
+          "password": password,
+        }),
       );
-    }
 
-    if (mounted) {
-      setState(() => isLoading = false);
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded['success'] == true) {
+          final data = decoded['data'];
+          final prefs = await SharedPreferences.getInstance();
+
+          await prefs.setString("token", data["token"] ?? "");
+          await prefs.setString("user_id", data["user_id"]?.toString() ?? "");
+          await prefs.setString("user_mobile", data["user_mobile"] ?? "");
+          await prefs.setString("username", data["username"] ?? "");
+          await prefs.setString("user_email", data["email"] ?? "");
+          await prefs.setString("user_constituency", data["constituency"] ?? "");
+          if (data["profile_image"] != null) {
+            await prefs.setString(
+              "profile_image_url",
+              "${ApiConfig.baseUrl}/uploads/profile_images/${data["profile_image"]}",
+            );
+          }
+
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const MainShell()),
+            (route) => false,
+          );
+          return;
+        }
+      }
+
+      String errorMsg = "Login failed";
+      try {
+        errorMsg = jsonDecode(response.body)["message"] ?? errorMsg;
+      } catch (_) {}
+      showError(errorMsg);
+    } catch (e) {
+      showError("Connection error: $e");
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
@@ -94,8 +133,8 @@ class _PasswordLoginPageState extends State<PasswordLoginPage> {
       showError("Enter a valid 10-digit number");
       return;
     }
-    if (password.isEmpty) {
-      showError("Create a secure password");
+    if (password.length < 6) {
+      showError("Password must be at least 6 characters long");
       return;
     }
     if (password != confirmPassword) {
@@ -103,24 +142,18 @@ class _PasswordLoginPageState extends State<PasswordLoginPage> {
       return;
     }
 
-    setState(() => isLoading = true);
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString("token", phone);
-    await prefs.setString("user_id", phone);
-    await prefs.setString("user_mobile", phone);
-
     if (mounted) {
-      Navigator.pushReplacement(
+      Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => EditProfilePage(userId: phone),
+          builder: (_) => EditProfilePage(
+            userId: phone,
+            phone: phone,
+            password: password,
+            isNewUser: true,
+          ),
         ),
       );
-    }
-
-    if (mounted) {
-      setState(() => isLoading = false);
     }
   }
 

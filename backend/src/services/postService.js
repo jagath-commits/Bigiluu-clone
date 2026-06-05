@@ -4,7 +4,7 @@ const categoryRepository = require('../repositories/categoryRepository');
 const { NotFoundError, BadRequestError, ForbiddenError } = require('../utils/customErrors');
 
 class PostService {
-  async createPost({ userId, categoryId, title, caption, content, coverImg, constituency }) {
+  async createPost({ userId, categoryId, title, caption, content, coverImg, constituency, hashtags }) {
     // Validate Category
     const category = await categoryRepository.findById(categoryId);
     if (!category) {
@@ -34,7 +34,8 @@ class PostService {
       caption,
       content,
       coverImg,
-      constituency: postConstituency
+      constituency: postConstituency,
+      hashtags
     });
   }
 
@@ -80,6 +81,36 @@ class PostService {
     }
 
     return await postRepository.delete(postId, userId);
+  }
+
+  async getTrendingHashtags() {
+    const postsHashtags = await postRepository.findAllHashtags();
+    const hashtagCounts = {};
+    postsHashtags.forEach(row => {
+      if (row.hashtags) {
+        const tags = row.hashtags.split(/\s+/).filter(t => t.startsWith('#'));
+        tags.forEach(tag => {
+          const normalized = tag.toLowerCase().trim();
+          if (normalized) {
+            hashtagCounts[normalized] = (hashtagCounts[normalized] || 0) + 1;
+          }
+        });
+      }
+    });
+
+    const sortedHashtags = Object.entries(hashtagCounts)
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count);
+
+    return sortedHashtags;
+  }
+
+  async incrementViews(postId) {
+    const post = await postRepository.findById(postId);
+    if (!post) {
+      throw new NotFoundError('Story not found');
+    }
+    return await postRepository.incrementViews(postId);
   }
 }
 

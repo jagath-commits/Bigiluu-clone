@@ -27,9 +27,13 @@ const storage = multer.diskStorage({
     }
   },
   filename: (req, file, cb) => {
-    // Generate secure randomized filename retaining the original extension
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    if (file.fieldname === 'page_images') {
+      cb(null, file.originalname);
+    } else {
+      // Generate secure randomized filename retaining the original extension
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
   }
 });
 

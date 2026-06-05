@@ -5,7 +5,11 @@ class DraftController {
     try {
       const userId = req.user.userId;
       const { draft_id, category_id, title, content } = req.body;
-      const coverImg = req.file ? req.file.filename : undefined;
+      
+      let coverImg = undefined;
+      if (req.files && req.files['cover_image'] && req.files['cover_image'].length > 0) {
+        coverImg = req.files['cover_image'][0].filename;
+      }
 
       const savedDraft = await draftService.saveDraft({
         draftId: draft_id,

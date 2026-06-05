@@ -33,8 +33,8 @@ class EngagementRepository {
         .input('UserId', sql.VarChar, userId)
         .input('PostId', sql.VarChar, postId)
         .query(`
-          INSERT INTO dbo.Supports (UserId, PostId, CreatedBy)
-          VALUES (@UserId, @PostId, @UserId)
+          INSERT INTO dbo.Supports (UserId, PostId, CreatedBy, ModifiedBy)
+          VALUES (@UserId, @PostId, @UserId, @UserId)
         `);
       return { supported: true };
     }
@@ -72,8 +72,8 @@ class EngagementRepository {
         .input('UserId', sql.VarChar, userId)
         .input('PostId', sql.VarChar, postId)
         .query(`
-          INSERT INTO dbo.Saves (UserId, PostId, CreatedBy)
-          VALUES (@UserId, @PostId, @UserId)
+          INSERT INTO dbo.Saves (UserId, PostId, CreatedBy, ModifiedBy)
+          VALUES (@UserId, @PostId, @UserId, @UserId)
         `);
       return { saved: true };
     }
@@ -85,7 +85,7 @@ class EngagementRepository {
       .input('UserId', sql.VarChar, userId)
       .query(`
         SELECT p.PostId as post_id, p.UserId as user_id, p.CategoryId as category_id, p.Title as title, p.Caption as caption,
-               p.Content as content, p.CoverImg as cover_img, p.Constituency, p.CreatedDate,
+               p.Content as content, p.CoverImg as cover_img, p.Constituency, p.Hashtags as hashtags, p.Views as views, p.CreatedDate,
                u.Username as username, u.ProfileImage as profile_image, u.Constituency as Constituency,
                c.CategoryName as category,
                (SELECT COUNT(*) FROM dbo.Supports s WHERE s.PostId = p.PostId AND s.IsDeleted = 0) as support_count

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform, File;
 import 'package:dmk_project/home.dart';
+import 'package:dmk_project/api_config.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:mime/mime.dart';
@@ -231,7 +232,13 @@ class _WritePageState extends State<WritePage> {
     super.initState();
 
     if (widget.category != null) {
-      selectedCategoryId = int.tryParse(widget.category!);
+      String cat = widget.category!;
+      if (cat.startsWith("CAT")) {
+        String numPart = cat.replaceFirst(RegExp(r'^CAT0*'), '');
+        selectedCategoryId = int.tryParse(numPart);
+      } else {
+        selectedCategoryId = int.tryParse(cat);
+      }
     }
 
     _draftId = widget.draftId;
@@ -370,7 +377,7 @@ class _WritePageState extends State<WritePage> {
       _pdfExtractionStatusNotifier.value = "Uploading document...";
       _showPdfExtractionProgressDialog();
 
-      final uri = Uri.parse("https://bigiluu.com/api/posts/extractDocument");
+      final uri = Uri.parse("${ApiConfig.apiBaseUrl}/posts/extractDocument");
       var request = http.MultipartRequest("POST", uri);
       _pdfExtractionClient = http.Client();
 
@@ -450,7 +457,7 @@ class _WritePageState extends State<WritePage> {
         final chunkResponse = await _pdfExtractionClient!
             .get(
               Uri.parse(
-                "https://bigiluu.com/api/posts/documentChunk/$extractionId/$i",
+                "${ApiConfig.apiBaseUrl}/posts/documentChunk/$extractionId/$i",
               ),
             )
             .timeout(const Duration(minutes: 1));
@@ -1244,7 +1251,7 @@ class _WritePageState extends State<WritePage> {
                 // do nothing
               } else {
                 // fallback for old images (local)
-                finalUrl = "https://bigiluu.com/$finalUrl";
+                finalUrl = "${ApiConfig.baseUrl}/$finalUrl";
               }
 
               print("✅ FINAL URL: $finalUrl");
@@ -1323,16 +1330,23 @@ class _WritePageState extends State<WritePage> {
       }
 
       final userId = prefs.getString("user_id");
+      final token = prefs.getString("token") ?? "";
 
-      final uri = Uri.parse("https://bigiluu.com/api/draft/saveDraft");
+      final uri = Uri.parse("${ApiConfig.apiBaseUrl}/draft/saveDraft");
 
       var request = http.MultipartRequest("POST", uri);
 
+      request.headers['Authorization'] = 'Bearer $token';
       request.headers['Connection'] = 'keep-alive';
 
       request.fields["user_id"] = userId ?? "";
 
-      request.fields["category_id"] = selectedCategoryId?.toString() ?? "";
+      String localCatId = selectedCategoryId?.toString() ?? "";
+      String backendCatId = localCatId;
+      if (localCatId.isNotEmpty && !localCatId.startsWith("CAT")) {
+        backendCatId = "CAT" + localCatId.padLeft(8, '0');
+      }
+      request.fields["category_id"] = backendCatId;
 
       if (_draftId != null) {
         request.fields["draft_id"] = _draftId!;
@@ -3743,13 +3757,167 @@ class _PostPageState extends State<PostPage> {
   String _getCategoryName(String? categoryId) {
     switch (categoryId) {
       case "2":
+      case "CAT00000002":
         return "சிந்தனைகள்";
       case "3":
+      case "CAT00000003":
         return "அறிகைகள்";
       case "4":
+      case "CAT00000004":
         return "நூலகம்";
       default:
         return categoryId ?? "";
+    }
+  }
+
+  Future<void> _publishPost() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+
+      if (_titleController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enter a title")),
+        );
+        return;
+      }
+
+      setState(() => isLoading = true);
+
+      final uri = Uri.parse("${ApiConfig.apiBaseUrl}/posts");
+      var request = http.MultipartRequest("POST", uri);
+
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Connection'] = 'keep-alive';
+
+      String localCatId = widget.category ?? "2";
+      String backendCatId = localCatId;
+      if (!localCatId.startsWith("CAT")) {
+        backendCatId = "CAT" + localCatId.padLeft(8, '0');
+      }
+
+      request.fields["categoryId"] = backendCatId;
+      request.fields["title"] = _titleController.text.trim();
+      request.fields["caption"] = _captionController.text.trim();
+      final tags = extractHashtags(_hashtagController.text.trim());
+      request.fields["hashtags"] = tags.join(" ");
+
+      List<Map<String, dynamic>> pagesJson = [];
+      for (var page in widget.pages) {
+        List<Map<String, dynamic>> blocksJson = [];
+        for (var block in page.blocks) {
+          String? imageName;
+          if (block.type == "image") {
+            if (block.image != null) {
+              final fileName =
+                  "${block.blockId}_${DateTime.now().millisecondsSinceEpoch}.jpg";
+              final mimeType = lookupMimeType(block.image!.path);
+              final mimeSplit = mimeType?.split('/') ?? ['image', 'jpeg'];
+              request.files.add(
+                await http.MultipartFile.fromPath(
+                  "page_images",
+                  block.image!.path,
+                  filename: fileName,
+                  contentType: MediaType(mimeSplit[0], mimeSplit[1]),
+                ),
+              );
+              imageName = fileName;
+            } else if (block.imageUrl != null && block.imageUrl!.isNotEmpty) {
+              imageName = block.imageUrl;
+            }
+          }
+          blocksJson.add({
+            "type": block.type,
+            "text": block.text,
+            "image": imageName,
+            "blockId": block.blockId,
+            "imageWidth": block.imageWidth,
+            "imagePosX": block.imagePosition?.dx,
+            "imagePosY": block.imagePosition?.dy,
+            "isHeadline": block.isHeadline,
+            "fontColor": block.fontColor,
+            "fontSize": block.fontSize,
+            "fontFamily": block.fontFamily,
+            "lineSpacing": block.lineSpacing,
+            "letterSpacing": block.letterSpacing,
+            "textAlign": block.textAlign?.index,
+          });
+        }
+        pagesJson.add({
+          "fontSize": page.fontSize,
+          "fontFamily": page.fontFamily,
+          "fontColor": page.fontColor,
+          "lineSpacing": page.lineSpacing,
+          "letterSpacing": page.letterSpacing,
+          "pageMargin": page.pageMargin,
+          "textAlign": page.textAlign.index,
+          "blocks": blocksJson,
+        });
+      }
+      request.fields["content"] = jsonEncode(pagesJson);
+
+      if (widget.coverImage != null) {
+        final mimeType = lookupMimeType(widget.coverImage!.path);
+        final mimeSplit = mimeType?.split('/') ?? ['image', 'jpeg'];
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            "cover_image",
+            widget.coverImage!.path,
+            contentType: MediaType(mimeSplit[0], mimeSplit[1]),
+          ),
+        );
+      }
+
+      var streamedResponse = await request.send().timeout(
+        const Duration(seconds: 90),
+      );
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Story published successfully!")),
+        );
+
+        if (widget.draftId != null) {
+          try {
+            await http.delete(
+              Uri.parse("${ApiConfig.apiBaseUrl}/draft/${widget.draftId}"),
+              headers: {"Authorization": "Bearer $token"},
+            );
+          } catch (_) {}
+        }
+
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MainShell()),
+          (route) => false,
+        );
+      } else {
+        String errorMsg = "Unknown error";
+        try {
+          errorMsg = jsonDecode(response.body)["message"] ?? errorMsg;
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Publish failed: $errorMsg"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to publish: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
@@ -3872,10 +4040,7 @@ class _PostPageState extends State<PostPage> {
             ElevatedButton(
               onPressed: isLoading
                   ? null
-                  : () async {
-                      setState(() => isLoading = true);
-                      setState(() => isLoading = false);
-                    },
+                  : _publishPost,
               style: ElevatedButton.styleFrom(
                 backgroundColor: brandColor,
                 minimumSize: const Size(double.infinity, 64),

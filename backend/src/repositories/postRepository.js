@@ -1,7 +1,7 @@
 const { getPool, sql } = require('../config/db');
 
 class PostRepository {
-  async create({ userId, categoryId, title, caption, content, coverImg, constituency }) {
+  async create({ userId, categoryId, title, caption, content, coverImg, constituency, hashtags }) {
     const pool = await getPool();
     const result = await pool.request()
       .input('UserId', sql.VarChar, userId)
@@ -11,10 +11,11 @@ class PostRepository {
       .input('Content', sql.NVarChar, content) // JSON String
       .input('CoverImg', sql.VarChar, coverImg || null)
       .input('Constituency', sql.NVarChar, constituency || null)
+      .input('Hashtags', sql.NVarChar, hashtags || null)
       .query(`
-        INSERT INTO dbo.Posts (UserId, CategoryId, Title, Caption, Content, CoverImg, Constituency, CreatedBy)
-        OUTPUT INSERTED.PostId, INSERTED.UserId, INSERTED.CategoryId, INSERTED.Title, INSERTED.Caption, INSERTED.Content, INSERTED.CoverImg, INSERTED.Constituency
-        VALUES (@UserId, @CategoryId, @Title, @Caption, @Content, @CoverImg, @Constituency, @UserId)
+        INSERT INTO dbo.Posts (UserId, CategoryId, Title, Caption, Content, CoverImg, Constituency, Hashtags, CreatedBy, ModifiedBy)
+        OUTPUT INSERTED.PostId, INSERTED.UserId, INSERTED.CategoryId, INSERTED.Title, INSERTED.Caption, INSERTED.Content, INSERTED.CoverImg, INSERTED.Constituency, INSERTED.Hashtags
+        VALUES (@UserId, @CategoryId, @Title, @Caption, @Content, @CoverImg, @Constituency, @Hashtags, @UserId, @UserId)
       `);
     return result.recordset[0];
   }
@@ -24,7 +25,7 @@ class PostRepository {
     const result = await pool.request()
       .input('PostId', sql.VarChar, postId)
       .query(`
-        SELECT p.PostId, p.UserId, p.CategoryId, p.Title, p.Caption, p.Content, p.CoverImg, p.Constituency, p.CreatedDate,
+        SELECT p.PostId, p.UserId, p.CategoryId, p.Title, p.Caption, p.Content, p.CoverImg, p.Constituency, p.Hashtags as hashtags, p.Views as views, p.CreatedDate,
                u.Username as username, u.ProfileImage as profile_image, u.Constituency as user_constituency,
                c.CategoryName as category,
                (SELECT COUNT(*) FROM dbo.Supports s WHERE s.PostId = p.PostId AND s.IsDeleted = 0) as support_count
@@ -36,7 +37,7 @@ class PostRepository {
     return result.recordset[0];
   }
 
-  async update(postId, userId, { categoryId, title, caption, content, coverImg, constituency }) {
+  async update(postId, userId, { categoryId, title, caption, content, coverImg, constituency, hashtags }) {
     const pool = await getPool();
     let query = 'UPDATE dbo.Posts SET ModifiedDate = GETDATE()';
     const request = pool.request();
@@ -66,6 +67,10 @@ class PostRepository {
     if (constituency !== undefined) {
       query += ', Constituency = @Constituency';
       request.input('Constituency', sql.NVarChar, constituency);
+    }
+    if (hashtags !== undefined) {
+      query += ', Hashtags = @Hashtags';
+      request.input('Hashtags', sql.NVarChar, hashtags);
     }
 
     query += ' WHERE PostId = @PostId AND UserId = @UserId AND IsDeleted = 0';
@@ -101,8 +106,13 @@ class PostRepository {
     const request = pool.request();
 
     if (search) {
-      baseQuery += ' AND (p.Title LIKE @Search OR p.Caption LIKE @Search OR c.CategoryName LIKE @Search)';
-      request.input('Search', sql.NVarChar, `%${search}%`);
+      if (search.startsWith('#')) {
+        baseQuery += ' AND p.Hashtags LIKE @Search';
+        request.input('Search', sql.NVarChar, `%${search}%`);
+      } else {
+        baseQuery += ' AND (p.Title LIKE @Search OR p.Caption LIKE @Search OR c.CategoryName LIKE @Search OR p.Hashtags LIKE @Search)';
+        request.input('Search', sql.NVarChar, `%${search}%`);
+      }
     }
     if (categoryId && categoryId !== 'all') {
       baseQuery += ' AND p.CategoryId = @CategoryId';
@@ -136,7 +146,7 @@ class PostRepository {
     // Fetch details
     const dataResult = await request.query(`
       SELECT p.PostId as post_id, p.UserId as user_id, p.CategoryId as category_id, p.Title as title, p.Caption as caption,
-             p.Content as content, p.CoverImg as cover_img, p.Constituency, p.CreatedDate,
+             p.Content as content, p.CoverImg as cover_img, p.Constituency, p.Hashtags as hashtags, p.Views as views, p.CreatedDate,
              u.Username as username, u.ProfileImage as profile_image, u.Constituency as Constituency,
              c.CategoryName as category,
              (SELECT COUNT(*) FROM dbo.Supports s WHERE s.PostId = p.PostId AND s.IsDeleted = 0) as support_count
@@ -160,7 +170,7 @@ class PostRepository {
       .input('UserId', sql.VarChar, userId)
       .query(`
         SELECT p.PostId as post_id, p.UserId as user_id, p.CategoryId as category_id, p.Title as title, p.Caption as caption,
-               p.Content as content, p.CoverImg as cover_img, p.Constituency, p.CreatedDate,
+               p.Content as content, p.CoverImg as cover_img, p.Constituency, p.Hashtags as hashtags, p.Views as views, p.CreatedDate,
                u.Username as username, u.ProfileImage as profile_image, u.Constituency as Constituency,
                c.CategoryName as category,
                (SELECT COUNT(*) FROM dbo.Supports s WHERE s.PostId = p.PostId AND s.IsDeleted = 0) as support_count
@@ -171,6 +181,29 @@ class PostRepository {
         ORDER BY p.CreatedDate DESC
       `);
     return result.recordset;
+  }
+
+  async findAllHashtags() {
+    const pool = await getPool();
+    const result = await pool.request()
+      .query(`
+        SELECT p.Hashtags as hashtags
+        FROM dbo.Posts p
+        WHERE p.IsDeleted = 0 AND p.IsActive = 1 AND p.Hashtags IS NOT NULL AND p.Hashtags <> ''
+      `);
+    return result.recordset;
+  }
+
+  async incrementViews(postId) {
+    const pool = await getPool();
+    await pool.request()
+      .input('PostId', sql.VarChar, postId)
+      .query(`
+        UPDATE dbo.Posts 
+        SET Views = Views + 1 
+        WHERE PostId = @PostId AND IsDeleted = 0 AND IsActive = 1
+      `);
+    return true;
   }
 }
 

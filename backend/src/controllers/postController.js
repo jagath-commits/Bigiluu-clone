@@ -7,8 +7,12 @@ class PostController {
   async createPost(req, res, next) {
     try {
       const userId = req.user.userId;
-      const { categoryId, title, caption, content, constituency } = req.body;
-      const coverImg = req.file ? req.file.filename : null;
+      const { categoryId, title, caption, content, constituency, hashtags } = req.body;
+      
+      let coverImg = null;
+      if (req.files && req.files['cover_image'] && req.files['cover_image'].length > 0) {
+        coverImg = req.files['cover_image'][0].filename;
+      }
 
       const newPost = await postService.createPost({
         userId,
@@ -17,7 +21,8 @@ class PostController {
         caption,
         content,
         coverImg,
-        constituency
+        constituency,
+        hashtags
       });
 
       return res.status(201).json({
@@ -167,6 +172,32 @@ class PostController {
       const chunk = await documentService.getChunk(extractionId, chunkIndex);
 
       return res.status(200).json(chunk);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getTrendingHashtags(req, res, next) {
+    try {
+      const hashtags = await postService.getTrendingHashtags();
+      return res.status(200).json({
+        success: true,
+        message: 'Trending hashtags retrieved successfully',
+        data: hashtags
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async incrementViews(req, res, next) {
+    try {
+      const { postId } = req.params;
+      await postService.incrementViews(postId);
+      return res.status(200).json({
+        success: true,
+        message: 'Views incremented successfully'
+      });
     } catch (err) {
       next(err);
     }

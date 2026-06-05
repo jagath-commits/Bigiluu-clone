@@ -1,4 +1,10 @@
+import 'dart:convert';
 import 'dart:io' show File;
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:mime/mime.dart';
+import 'package:dmk_project/api_config.dart';
+import 'package:dmk_project/home.dart';
 import 'package:dmk_project/app_theme.dart';
 import 'package:dmk_project/password_login.dart';
 import 'package:flutter/material.dart';
@@ -291,10 +297,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
     setState(() {
       _nameController.text =
           prefs.getString("username") ?? _nameController.text;
+      _emailController.text =
+          prefs.getString("user_email") ?? _emailController.text;
+      _mobileController.text =
+          prefs.getString("user_mobile") ?? widget.userId;
       String? localConst = prefs.getString("user_constituency");
       if (localConst != null && _constituencies.contains(localConst)) {
         _selectedConstituency = localConst;
       }
+      _networkImageUrl = prefs.getString("profile_image_url");
     });
   }
 
@@ -359,6 +370,160 @@ class _EditProfilePageState extends State<EditProfilePage> {
   // ===============================
   // UI
   // ===============================
+  Future<void> _saveProfile() async {
+    final String username = _nameController.text.trim();
+    final String email = _emailController.text.trim();
+    final String constituency = _selectedConstituency ?? "";
+
+    if (username.length < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Name must be at least 3 characters")),
+      );
+      return;
+    }
+    if (email.isEmpty || !RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Enter a valid email address")),
+      );
+      return;
+    }
+    if (constituency.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select your constituency")),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      if (widget.isNewUser) {
+        final uri = Uri.parse("${ApiConfig.apiBaseUrl}/auth/register");
+        var request = http.MultipartRequest("POST", uri);
+
+        request.fields["mobileNumber"] = widget.phone ?? "";
+        request.fields["password"] = widget.password ?? "";
+        request.fields["username"] = username;
+        request.fields["email"] = email;
+        request.fields["constituency"] = constituency;
+
+        if (_image != null) {
+          final mimeType = lookupMimeType(_image!.path);
+          final mimeSplit = mimeType?.split('/') ?? ['image', 'jpeg'];
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              "profile_image",
+              _image!.path,
+              contentType: MediaType(mimeSplit[0], mimeSplit[1]),
+            ),
+          );
+        }
+
+        var streamedResponse = await request.send().timeout(const Duration(seconds: 90));
+        var response = await http.Response.fromStream(streamedResponse);
+
+        if (!mounted) return;
+
+        if (response.statusCode == 201 || response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          if (decoded['success'] == true) {
+            final data = decoded['data'];
+            
+            await prefs.setString("token", data["token"] ?? "");
+            await prefs.setString("user_id", data["user_id"]?.toString() ?? "");
+            await prefs.setString("user_mobile", data["user_mobile"] ?? "");
+            await prefs.setString("username", data["username"] ?? "");
+            await prefs.setString("user_email", data["email"] ?? "");
+            await prefs.setString("user_constituency", data["constituency"] ?? "");
+            if (data["profile_image"] != null) {
+              await prefs.setString("profile_image_url", "${ApiConfig.baseUrl}/uploads/profile_images/${data["profile_image"]}");
+            }
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Registered successfully!")),
+            );
+
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const MainShell()),
+              (route) => false,
+            );
+            return;
+          }
+        }
+        
+        final errorMsg = jsonDecode(response.body)["message"] ?? "Registration failed";
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Registration failed: $errorMsg"), backgroundColor: Colors.red),
+        );
+      } else {
+        final token = prefs.getString("token") ?? "";
+        final uri = Uri.parse("${ApiConfig.apiBaseUrl}/profile/update");
+        var request = http.MultipartRequest("POST", uri);
+
+        request.headers["Authorization"] = "Bearer $token";
+        request.fields["username"] = username;
+        request.fields["email"] = email;
+        request.fields["constituency"] = constituency;
+
+        if (_image != null) {
+          final mimeType = lookupMimeType(_image!.path);
+          final mimeSplit = mimeType?.split('/') ?? ['image', 'jpeg'];
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              "profile_image",
+              _image!.path,
+              contentType: MediaType(mimeSplit[0], mimeSplit[1]),
+            ),
+          );
+        }
+
+        var streamedResponse = await request.send().timeout(const Duration(seconds: 90));
+        var response = await http.Response.fromStream(streamedResponse);
+
+        if (!mounted) return;
+
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          if (decoded['success'] == true) {
+            final data = decoded['data'];
+
+            await prefs.setString("username", data["Username"] ?? username);
+            await prefs.setString("user_email", data["Email"] ?? email);
+            await prefs.setString("user_constituency", data["Constituency"] ?? constituency);
+            if (data["ProfileImage"] != null) {
+              await prefs.setString("profile_image_url", "${ApiConfig.baseUrl}/uploads/profile_images/${data["ProfileImage"]}");
+              await prefs.remove("profile_image_path");
+            }
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Profile updated successfully!")),
+            );
+            Navigator.pop(context);
+            return;
+          }
+        }
+
+        final errorMsg = jsonDecode(response.body)["message"] ?? "Update failed";
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Update failed: $errorMsg"), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("An error occurred: $e"), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
@@ -467,26 +632,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         child: Material(
                           color: Colors.transparent,
                           child: InkWell(
-                            onTap: () async {
-                              final prefs =
-                                  await SharedPreferences.getInstance();
-
-                              await prefs.setString(
-                                "username",
-                                _nameController.text,
-                              );
-
-                              await prefs.setString(
-                                "user_constituency",
-                                _selectedConstituency ?? "",
-                              );
-
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Profile Saved")),
-                              );
-                              Navigator.pop(context);
-                            },
+                            onTap: _saveProfile,
                             borderRadius: BorderRadius.circular(14),
                             child: Container(
                               width: double.infinity,
