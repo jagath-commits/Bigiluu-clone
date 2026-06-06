@@ -377,8 +377,14 @@ class _WritePageState extends State<WritePage> {
       _pdfExtractionStatusNotifier.value = "Uploading document...";
       _showPdfExtractionProgressDialog();
 
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+
       final uri = Uri.parse("${ApiConfig.apiBaseUrl}/posts/extractDocument");
       var request = http.MultipartRequest("POST", uri);
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Connection'] = 'keep-alive';
+
       _pdfExtractionClient = http.Client();
 
       if (file != null) {
@@ -447,54 +453,87 @@ class _WritePageState extends State<WritePage> {
         throw Exception("No content extracted");
       }
 
-      final StringBuffer extractedText = StringBuffer();
-
-      for (int i = 0; i < totalChunks; i++) {
-        if (_pdfExtractionCancelled) {
-          throw Exception("PDF extraction canceled");
+      String finalText = "";
+      try {
+        if (mounted) {
+          setState(() {
+            _pdfExtractionStatus = "Downloading extracted text...";
+          });
+          _pdfExtractionStatusNotifier.value = "Downloading extracted text...";
         }
 
-        final chunkResponse = await _pdfExtractionClient!
+        final fullResponse = await _pdfExtractionClient!
             .get(
-              Uri.parse(
-                "${ApiConfig.apiBaseUrl}/posts/documentChunk/$extractionId/$i",
-              ),
+              Uri.parse("${ApiConfig.apiBaseUrl}/posts/documentFull/$extractionId"),
+              headers: {
+                "Authorization": "Bearer $token",
+              },
             )
-            .timeout(const Duration(minutes: 1));
+            .timeout(const Duration(minutes: 5));
 
-        if (chunkResponse.statusCode != 200) {
-          throw Exception(
-            "Chunk download failed: ${chunkResponse.statusCode}",
-          );
+        if (fullResponse.statusCode == 200) {
+          final decoded = jsonDecode(fullResponse.body);
+          if (decoded is Map && decoded["success"] == true) {
+            finalText = decoded["text"] ?? "";
+          }
         }
+      } catch (_) {
+        // Fallback below
+      }
 
-        if ((i + 1) % 2 == 0 || i == totalChunks - 1) {
-          if (mounted) {
-            setState(() {
-              _pdfExtractionStatus =
+      if (finalText.isEmpty) {
+        final StringBuffer extractedText = StringBuffer();
+
+        for (int i = 0; i < totalChunks; i++) {
+          if (_pdfExtractionCancelled) {
+            throw Exception("PDF extraction canceled");
+          }
+
+          final chunkResponse = await _pdfExtractionClient!
+              .get(
+                Uri.parse(
+                  "${ApiConfig.apiBaseUrl}/posts/documentChunk/$extractionId/$i",
+                ),
+                headers: {
+                  "Authorization": "Bearer $token",
+                },
+              )
+              .timeout(const Duration(minutes: 1));
+
+          if (chunkResponse.statusCode != 200) {
+            throw Exception(
+              "Chunk download failed: ${chunkResponse.statusCode}",
+            );
+          }
+
+          if ((i + 1) % 2 == 0 || i == totalChunks - 1) {
+            if (mounted) {
+              setState(() {
+                _pdfExtractionStatus =
+                    "Extracting document... (${i + 1}/$totalChunks)";
+              });
+              _pdfExtractionStatusNotifier.value =
                   "Extracting document... (${i + 1}/$totalChunks)";
-            });
-            _pdfExtractionStatusNotifier.value =
-                "Extracting document... (${i + 1}/$totalChunks)";
+            }
+          }
+
+          dynamic chunkData;
+
+          try {
+            chunkData = jsonDecode(chunkResponse.body);
+          } catch (e) {
+            throw Exception("Invalid chunk response");
+          }
+
+          extractedText.write(chunkData["chunk"] ?? "");
+
+          if (i % 5 == 0 && mounted) {
+            setState(() {});
           }
         }
 
-        dynamic chunkData;
-
-        try {
-          chunkData = jsonDecode(chunkResponse.body);
-        } catch (e) {
-          throw Exception("Invalid chunk response");
-        }
-
-        extractedText.write(chunkData["chunk"] ?? "");
-
-        if (i % 5 == 0 && mounted) {
-          setState(() {});
-        }
+        finalText = extractedText.toString();
       }
-
-      final finalText = extractedText.toString();
 
       if (finalText.length > 3000000) {
         throw Exception("Document too large after extraction");
@@ -509,7 +548,7 @@ class _WritePageState extends State<WritePage> {
 
       _focusedBlockIndex = null;
 
-      if (extractedText.length > 1500000) {
+      if (finalText.length > 1500000) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -3761,7 +3800,7 @@ class _PostPageState extends State<PostPage> {
         return "சிந்தனைகள்";
       case "3":
       case "CAT00000003":
-        return "அறிகைகள்";
+        return "அறிக்கைகள்";
       case "4":
       case "CAT00000004":
         return "நூலகம்";

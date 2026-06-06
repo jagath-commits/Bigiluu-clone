@@ -106,7 +106,7 @@ class _HomePageState extends State<HomePage> {
     (id: 'all', label: 'அனைத்தும்'),
     (id: '4', label: 'நூலகம்'),
     (id: '2', label: 'சிந்தனைகள்'),
-    (id: '3', label: 'அறிகைகள்'),
+    (id: '3', label: 'அறிக்கைகள்'),
   ];
 
   @override
@@ -357,8 +357,8 @@ class _HomePageState extends State<HomePage> {
       switch (_selectedCategoryId) {
         case '2': // சிந்தனைகள் (Thoughts / Sinthanaigal)
           return catName.contains('sinthanaigal') || catName.contains('thoughts') || catName.contains('சிந்தனைகள்');
-        case '3': // அறிகுறைகள் / அறிகைகள் (Announcements / Arikaigal)
-          return catName.contains('arikaigal') || catName.contains('announcements') || catName.contains('அறிகைகள்');
+        case '3': // அறிக்கைகள் / அறிகுறைகள் (Announcements / Arikaigal)
+          return catName.contains('arikaigal') || catName.contains('announcements') || catName.contains('அறிக்கைகள்') || catName.contains('அறிகைகள்');
         case '4': // நூலகம் (Library / Noolagam)
           return catName.contains('noolagam') || catName.contains('library') || catName.contains('நூலகம்');
         default:
@@ -566,8 +566,8 @@ class PostContainer extends StatelessWidget {
     if (lower.contains("sinthanaigal") || lower.contains("thoughts") || lower.contains("சிந்தனைகள்")) {
       return "சிந்தனைகள்";
     }
-    if (lower.contains("arikaigal") || lower.contains("announcements") || lower.contains("அறிகைகள்")) {
-      return "அறிகைகள்";
+    if (lower.contains("arikaigal") || lower.contains("announcements") || lower.contains("அறிக்கைகள்") || lower.contains("அறிகைகள்")) {
+      return "அறிக்கைகள்";
     }
     if (lower.contains("noolagam") || lower.contains("library") || lower.contains("நூலகம்")) {
       return "நூலகம்";
@@ -1292,6 +1292,32 @@ class _FullScreenPostViewerState extends State<FullScreenPostViewer> {
   double _fontSize = 18.0;
   String _appearance = "Sepia"; // Options: "Light", "Sepia", "Dark"
 
+  @override
+  void initState() {
+    super.initState();
+    _loadLastReadPage();
+  }
+
+  Future<void> _loadLastReadPage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedPage = prefs.getInt("last_read_page_${widget.postId}") ?? 0;
+    if (savedPage > 0 && savedPage < widget.pages.length) {
+      setState(() {
+        _currentPage = savedPage;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(savedPage);
+        }
+      });
+    }
+  }
+
+  Future<void> _saveLastReadPage(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt("last_read_page_${widget.postId}", index);
+  }
+
   Color _parseColor(dynamic val) {
     if (val == null) return Colors.black;
     try {
@@ -1772,6 +1798,7 @@ class _FullScreenPostViewerState extends State<FullScreenPostViewer> {
                   itemCount: totalPages,
                   onPageChanged: (index) {
                     setState(() => _currentPage = index);
+                    _saveLastReadPage(index);
                   },
                   itemBuilder: (context, index) {
                     final page = widget.pages[index];

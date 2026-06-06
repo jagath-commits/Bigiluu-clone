@@ -101,6 +101,21 @@ class DocumentService {
 
     return chunk;
   }
+
+  async getFullDocument(extractionId) {
+    const extraction = await documentRepository.findById(extractionId);
+    if (!extraction) {
+      throw new NotFoundError('Extraction session not found');
+    }
+
+    const chunks = await documentRepository.findAllChunks(extractionId);
+    const fullText = chunks.map(c => c.chunk).join('');
+
+    return {
+      success: true,
+      text: fullText
+    };
+  }
 }
 
 module.exports = new DocumentService();

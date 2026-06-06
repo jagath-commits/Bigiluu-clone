@@ -177,6 +177,16 @@ class PostController {
     }
   }
 
+  async getFullDocument(req, res, next) {
+    try {
+      const { extractionId } = req.params;
+      const result = await documentService.getFullDocument(extractionId);
+      return res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async getTrendingHashtags(req, res, next) {
     try {
       const hashtags = await postService.getTrendingHashtags();

@@ -31,5 +31,6 @@ router.post('/view/:postId', postController.incrementViews);
 // --- DOCUMENT AI TEXT EXTRACTION & CHUNKING ---
 router.post('/extractDocument', protect, upload.single('document'), postController.extractDocument);
 router.get('/documentChunk/:extractionId/:chunkIndex', postController.getDocumentChunk);
+router.get('/documentFull/:extractionId', postController.getFullDocument);
 
 module.exports = router;

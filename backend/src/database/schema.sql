@@ -311,3 +311,12 @@ BEGIN
     ALTER SEQUENCE Seq_Category RESTART WITH 5;
 END
 GO
+
+
+select * from dbo.Users
+
+select * from dbo.Posts
+
+select * from dbo.Drafts
+
+select*from dbo.Supports

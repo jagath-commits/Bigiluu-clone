@@ -51,6 +51,19 @@ class DocumentRepository {
       `);
     return result.recordset[0];
   }
+
+  async findAllChunks(extractionId) {
+    const pool = await getPool();
+    const result = await pool.request()
+      .input('ExtractionId', sql.VarChar, extractionId)
+      .query(`
+        SELECT ChunkText as chunk 
+        FROM dbo.DocumentChunks 
+        WHERE ExtractionId = @ExtractionId AND IsDeleted = 0 AND IsActive = 1
+        ORDER BY ChunkIndex ASC
+      `);
+    return result.recordset;
+  }
 }
 
 module.exports = new DocumentRepository();

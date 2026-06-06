@@ -51,7 +51,7 @@ Future<String?> showCategorySelectionBottomSheet(BuildContext context) async {
               children: [
                 _buildCategoryOption(context, '4', 'நூலகம்', Icons.library_books_rounded),
                 _buildCategoryOption(context, '2', 'சிந்தனைகள்', Icons.lightbulb_outline_rounded),
-                _buildCategoryOption(context, '3', 'அறிகைகள்', Icons.description_outlined),
+                _buildCategoryOption(context, '3', 'அறிக்கைகள்', Icons.description_outlined),
               ],
             ),
           ],
