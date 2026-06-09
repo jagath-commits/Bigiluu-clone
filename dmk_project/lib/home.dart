@@ -11,6 +11,8 @@ import 'package:dmk_project/app_bottom_nav.dart';
 import 'package:dmk_project/app_theme.dart';
 import 'package:dmk_project/hashtag.dart';
 import 'package:dmk_project/profile.dart';
+import 'package:dmk_project/legal_pages.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 // ==========================================
 // MAIN SHELL (TAB COORDINATOR)
@@ -378,7 +380,82 @@ class _HomePageState extends State<HomePage> {
     final filteredPosts = _getFilteredPosts();
 
     return Scaffold(
-      appBar: appBar('Star'),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0.5,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/images/Sooriyan-logo.png',
+              height: 32,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => const SizedBox(),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              "Sooriyan",
+              style: GoogleFonts.outfit(
+                color: const Color(0xFF1A1A1A),
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ],
+        ),
+        centerTitle: false,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded, color: AppColors.textPrimary),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            onSelected: (value) {
+              if (value == 'privacy') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),
+                );
+              } else if (value == 'terms') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TermsConditionsPage()),
+                );
+              }
+            },
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem<String>(
+                value: 'privacy',
+                child: Row(
+                  children: [
+                    Icon(Icons.privacy_tip_outlined, size: 20, color: AppColors.brand),
+                    SizedBox(width: 10),
+                    Text(
+                      'Privacy Policy',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'terms',
+                child: Row(
+                  children: [
+                    Icon(Icons.description_outlined, size: 20, color: AppColors.brand),
+                    SizedBox(width: 10),
+                    Text(
+                      'Terms & Conditions',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
       body: Column(
         children: [
           // Category Selector

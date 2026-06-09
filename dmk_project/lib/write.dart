@@ -1952,6 +1952,22 @@ class _WritePageState extends State<WritePage> {
           toolbarHeight: 70,
           title: Row(
             children: [
+              Image.asset(
+                'assets/images/Sooriyan-logo.png',
+                height: 32,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => const SizedBox(),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                "Sooriyan",
+                style: GoogleFonts.outfit(
+                  color: const Color(0xFF1A1A1A),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                  letterSpacing: -0.3,
+                ),
+              ),
               const Spacer(),
               TextButton(
                 onPressed: _showSaveDraftConfirmation,

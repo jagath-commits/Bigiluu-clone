@@ -86,7 +86,10 @@ class PoweredByBadge extends StatelessWidget {
 }
 
 /// Use when image assets are added to pubspec later.
-Widget appLogoImage({double height = 72, String asset = 'assets/images/bigilu_logo21.png'}) {
+Widget appLogoImage({
+  double height = 72,
+  String asset = 'assets/images/IMG_9631-removebg-preview.png',
+}) {
   return Image.asset(
     asset,
     height: height,
