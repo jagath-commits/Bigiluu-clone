@@ -840,6 +840,25 @@ class _WritePageState extends State<WritePage> {
     // Senior PE: Safety guard for invalid width
     if (maxWidth <= 10) return true;
 
+    // Optimization: If a prefix of the text already overflows, the whole text overflows.
+    // This avoids layout-ing huge strings when user pastes large content.
+    const int maxSafeLength = 3000;
+    if (text.length > maxSafeLength) {
+      bool prefixOverflows = _doesTextOverflow(
+        text.substring(0, maxSafeLength),
+        page,
+        maxWidth,
+        assumeImage: assumeImage,
+        isHeadline: isHeadline,
+        fontSize: fontSize,
+        fontFamily: fontFamily,
+        lineSpacing: lineSpacing,
+        letterSpacing: letterSpacing,
+        textAlign: textAlign,
+      );
+      if (prefixOverflows) return true;
+    }
+
     final painter = TextPainter(
       text: TextSpan(
         text: text,
@@ -1042,8 +1061,39 @@ class _WritePageState extends State<WritePage> {
           lastBlock.text = candidate;
           remaining = "";
         } else {
-          // need to split; binary search for largest prefix that fits
-          int low = 0, high = remaining.length;
+          // Exponential search to find a tight upper bound for high.
+          // This avoids layout-ing large strings inside the binary search loop.
+          int step = 256;
+          while (step < remaining.length) {
+            String tempCandidate;
+            if (existing.isNotEmpty &&
+                !remaining.startsWith("\n") &&
+                !existing.endsWith("\n")) {
+              tempCandidate =
+                  existing + _paragraphSep + remaining.substring(0, step);
+            } else {
+              tempCandidate = existing + remaining.substring(0, step);
+            }
+
+            if (_doesTextOverflow(
+              tempCandidate,
+              page,
+              maxWidth,
+              isHeadline: srcBlock.isHeadline,
+              fontSize: srcBlock.fontSize,
+              fontFamily: srcBlock.fontFamily,
+              lineSpacing: srcBlock.lineSpacing,
+              letterSpacing: srcBlock.letterSpacing,
+              textAlign: srcBlock.textAlign,
+            )) {
+              break;
+            }
+            step *= 2;
+          }
+
+          int low = (step > 256) ? step ~/ 2 : 0;
+          int high = min(step, remaining.length);
+
           while (low < high) {
             int mid = (low + high + 1) ~/ 2;
 

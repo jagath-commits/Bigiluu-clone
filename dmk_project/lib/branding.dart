@@ -39,7 +39,7 @@ class AppLogo extends StatelessWidget {
         ),
         SizedBox(height: height * 0.1),
         Text(
-          'Bigilu',
+          'Sooriyan',
           style: TextStyle(
             fontSize: fontSize,
             fontWeight: FontWeight.w900,

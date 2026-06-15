@@ -668,20 +668,23 @@ class PostContainer extends StatelessWidget {
           color: const Color(0xFFF2F4F7),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: iconColor, size: 18),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: textColor,
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: iconColor, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: textColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -959,7 +962,7 @@ class PostContainer extends StatelessWidget {
                       textColor: Colors.black87,
                       label: "Share",
                       onTap: () {
-                        Share.share("Check out this story: '$title' on Bigilu!");
+                        Share.share("Check out this story: '$title' on Sooriyan!");
                       },
                     ),
                   ],
