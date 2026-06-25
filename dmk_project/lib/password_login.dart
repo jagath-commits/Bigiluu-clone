@@ -9,6 +9,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 // ============================================================
 // SINGLE PAGE TABBED PORTAL: SIGN IN / SIGN UP
@@ -71,10 +72,7 @@ class _PasswordLoginPageState extends State<PasswordLoginPage> {
       final response = await http.post(
         Uri.parse("${ApiConfig.apiBaseUrl}/auth/login"),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "mobileNumber": phone,
-          "password": password,
-        }),
+        body: jsonEncode({"mobileNumber": phone, "password": password}),
       );
 
       if (!mounted) return;
@@ -85,12 +83,30 @@ class _PasswordLoginPageState extends State<PasswordLoginPage> {
           final data = decoded['data'];
           final prefs = await SharedPreferences.getInstance();
 
+          String? fcmToken = await FirebaseMessaging.instance.getToken();
+
+          print("FCM TOKEN => $fcmToken");
+
           await prefs.setString("token", data["token"] ?? "");
           await prefs.setString("user_id", data["user_id"]?.toString() ?? "");
+
+          //String? fcmToken = await FirebaseMessaging.instance.getToken();
+
+          await http.post(
+            Uri.parse("${ApiConfig.apiBaseUrl}/auth/save-fcm-token"),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              "user_id": data["user_id"],
+              "fcm_token": fcmToken,
+            }),
+          );
           await prefs.setString("user_mobile", data["user_mobile"] ?? "");
           await prefs.setString("username", data["username"] ?? "");
           await prefs.setString("user_email", data["email"] ?? "");
-          await prefs.setString("user_constituency", data["constituency"] ?? "");
+          await prefs.setString(
+            "user_constituency",
+            data["constituency"] ?? "",
+          );
           if (data["profile_image"] != null) {
             await prefs.setString(
               "profile_image_url",
@@ -348,7 +364,8 @@ class _PasswordLoginPageState extends State<PasswordLoginPage> {
                                             ),
                                             boxShadow: [
                                               BoxShadow(
-                                                color: AppColors.brand.withValues(alpha: 0.25),
+                                                color: AppColors.brand
+                                                    .withValues(alpha: 0.25),
                                                 blurRadius: 6,
                                                 offset: const Offset(0, 3),
                                               ),
@@ -872,7 +889,10 @@ class TermsPage extends StatelessWidget {
     const brandColor = AppColors.brand;
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Terms & Conditions", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          "Terms & Conditions",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: brandColor,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -898,7 +918,10 @@ class PrivacyPage extends StatelessWidget {
     const brandColor = AppColors.brand;
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Privacy Policy", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          "Privacy Policy",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: brandColor,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -915,4 +938,3 @@ class PrivacyPage extends StatelessWidget {
     );
   }
 }
-

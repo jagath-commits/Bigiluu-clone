@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
-
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:app_links/app_links.dart';
 import 'package:dmk_project/app_theme.dart';
 import 'package:dmk_project/home.dart';
@@ -11,11 +11,28 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:dmk_project/notification_post_page.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp();
+  await FirebaseMessaging.instance.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
+  const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  const initSettings = InitializationSettings(android: androidSettings);
+
+  await flutterLocalNotificationsPlugin.initialize(initSettings);
 
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -52,6 +69,56 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+
+    FirebaseMessaging.instance.getToken().then((token) {
+      print("FCM TOKEN: $token");
+    });
+    FirebaseMessaging.onMessageOpenedApp.listen((message) async {
+      print("FULL DATA = ${message.data}");
+      final postId = message.data['postId'];
+      print("POST ID = $postId");
+
+      if (postId != null) {
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => NotificationPostPage(postId: postId),
+          ),
+        );
+      }
+    });
+
+    FirebaseMessaging.instance.getInitialMessage().then((message) {
+      if (message != null) {
+        final postId = message.data['postId'];
+
+        if (postId != null) {
+          navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (_) => NotificationPostPage(postId: postId),
+            ),
+          );
+        }
+      }
+    });
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print("Notification Received");
+
+      flutterLocalNotificationsPlugin.show(
+        0,
+        message.notification?.title ?? '',
+        message.notification?.body ?? '',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'default_channel',
+            'Default Notifications',
+            importance: Importance.max,
+            priority: Priority.high,
+          ),
+        ),
+      );
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) => _initDeepLinks());
   }
 
@@ -114,9 +181,9 @@ class _MyAppState extends State<MyApp> {
       theme: AppTheme.light,
       builder: (context, child) {
         return MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.linear(1.0),
-          ),
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(1.0)),
           child: child!,
         );
       },
